@@ -8,10 +8,11 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, ClipboardList, Package, Users, Bot, Plus
+  LayoutDashboard, ClipboardList, Package, Users, Bot, Plus, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { subscribeOrders } from '@/lib/firestore/orders';
+import { useAuth } from '@/contexts/AuthContext';
 
 const mobileNavItems = [
   { href: '/',          icon: LayoutDashboard, label: 'Dashboard' },
@@ -22,17 +23,31 @@ const mobileNavItems = [
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const pathname = usePathname();
 
   // Subscribe to pending order count for the notification badge
   useEffect(() => {
+    if (!user) return; // Only subscribe if authenticated to prevent permission-denied errors
     const unsub = subscribeOrders((orders) => {
       setPendingCount(orders.filter(o => o.status === 'Pending').length);
     }, 200);
     return () => unsub();
-  }, []);
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null; // Middleware will redirect to /login
+  }
 
   return (
     <div className="flex h-dvh bg-gray-50 overflow-hidden">
