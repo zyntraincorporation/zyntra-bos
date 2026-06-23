@@ -1,53 +1,70 @@
 'use client';
 
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend
 } from 'recharts';
 import type { DailyChartPoint } from '@/types';
 
-interface SalesTrendChartProps {
-  data: DailyChartPoint[];
-}
+interface Props { data: DailyChartPoint[]; }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
-      <p className="font-semibold text-gray-700 mb-1">{label}</p>
-      <p className="text-emerald-600 font-bold">৳{payload[0]?.value?.toLocaleString('en-BD')}</p>
+    <div className="bg-white border border-gray-100 rounded-xl p-3 shadow-lg text-xs">
+      <p className="font-semibold text-gray-600 mb-1.5">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.name} className="flex items-center gap-2 mb-0.5">
+          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="text-gray-500">{p.name}:</span>
+          <span className="font-bold text-gray-800">৳{Number(p.value).toLocaleString()}</span>
+        </div>
+      ))}
     </div>
   );
 };
 
-export function SalesTrendChart({ data }: SalesTrendChartProps) {
+export function SalesTrendChart({ data }: Props) {
+  if (!data.length) {
+    return (
+      <div className="flex items-center justify-center h-48 text-gray-300 text-sm">
+        No data for this month yet
+      </div>
+    );
+  }
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={180}>
+      <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
         <defs>
-          <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#10b981" stopOpacity={0.2} />
-            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+          <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%"  stopColor="#10B981" stopOpacity={0.15} />
+            <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 10, fill: '#9ca3af' }}
-          tickLine={false}
+          tick={{ fontSize: 10, fill: '#9CA3AF' }}
           axisLine={false}
+          tickLine={false}
           interval="preserveStartEnd"
         />
-        <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+        <YAxis
+          tick={{ fontSize: 10, fill: '#9CA3AF' }}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}
+        />
         <Tooltip content={<CustomTooltip />} />
         <Area
           type="monotone"
           dataKey="revenue"
-          stroke="#10b981"
+          name="Revenue"
+          stroke="#10B981"
           strokeWidth={2}
-          fill="url(#salesGradient)"
+          fill="url(#gradRevenue)"
           dot={false}
-          activeDot={{ r: 4, fill: '#10b981' }}
+          activeDot={{ r: 4, strokeWidth: 0, fill: '#10B981' }}
         />
       </AreaChart>
     </ResponsiveContainer>

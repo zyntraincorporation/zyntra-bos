@@ -2,14 +2,16 @@
 
 import { usePathname } from 'next/navigation';
 import { Menu, Bell } from 'lucide-react';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
-const pageTitles: Record<string, string> = {
+const PAGE_TITLES: Record<string, string> = {
   '/':           'Dashboard',
+  '/orders':     'Orders',
   '/inventory':  'Inventory',
   '/purchases':  'Purchases',
   '/expenses':   'Expenses',
   '/ads':        'Ad Budget',
-  '/orders':     'Orders',
   '/customers':  'Customers',
   '/pnl':        'Profit & Loss',
   '/cashflow':   'Cash Flow',
@@ -19,37 +21,66 @@ const pageTitles: Record<string, string> = {
 
 interface HeaderProps {
   onMenuClick: () => void;
+  pendingCount?: number;
 }
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick, pendingCount = 0 }: HeaderProps) {
   const pathname = usePathname();
-  const baseRoute = '/' + (pathname.split('/')[1] ?? '');
-  const title = pageTitles[baseRoute] ?? 'Puspaloy Business OS';
+
+  // Resolve page title from current path
+  const title =
+    PAGE_TITLES[pathname] ??
+    Object.entries(PAGE_TITLES).find(([key]) => key !== '/' && pathname.startsWith(key))?.[1] ??
+    'Puspaloy BOS';
+
+  const today = format(new Date(), 'EEE, d MMM');
 
   return (
-    <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100">
-      <div className="flex items-center h-14 px-4 gap-3">
-        {/* Mobile menu toggle */}
-        <button
-          onClick={onMenuClick}
-          className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
+    <header
+      className={cn(
+        'shrink-0 flex items-center gap-3 px-4',
+        'bg-white border-b border-gray-100',
+        'h-14 md:h-16',
+        'sticky top-0 z-30'
+      )}
+      style={{ boxShadow: '0 1px 0 var(--border)' }}
+    >
+      {/* Mobile hamburger */}
+      <button
+        onClick={onMenuClick}
+        className="md:hidden p-2 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        aria-label="Open menu"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
 
-        {/* Page title */}
-        <h1 className="flex-1 text-base font-bold text-gray-900">{title}</h1>
+      {/* Page title */}
+      <div className="flex-1 min-w-0">
+        <h1 className="text-base font-bold text-gray-900 truncate">{title}</h1>
+        <p className="text-[11px] text-gray-400 hidden sm:block">{today}</p>
+      </div>
 
-        {/* Right actions */}
-        <div className="flex items-center gap-2">
-          <button className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-          </button>
-          <div className="text-xs text-gray-400 hidden sm:block">
-            {new Date().toLocaleDateString('en-BD', { weekday: 'short', day: 'numeric', month: 'short' })}
+      {/* Right actions */}
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Pending orders badge */}
+        {pendingCount > 0 && (
+          <div className="relative">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center bg-amber-50 text-amber-600"
+              title={`${pendingCount} pending orders`}
+            >
+              <Bell className="w-4 h-4" />
+            </div>
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+              {pendingCount > 9 ? '9+' : pendingCount}
+            </span>
           </div>
-        </div>
+        )}
+
+        {/* Date badge — desktop only */}
+        <span className="hidden md:flex items-center text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
+          {today}
+        </span>
       </div>
     </header>
   );

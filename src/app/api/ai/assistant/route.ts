@@ -8,108 +8,149 @@ import { getCustomers } from '@/lib/firestore/customers';
 import { getReturns } from '@/lib/firestore/returns';
 import { computeDashboardStats } from '@/lib/calculations/dashboard';
 
+const TIMEOUT_MS = 25000;
+
 export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'OpenRouter API key not configured' }, { status: 500 });
 
-    // Fetch live data from Firestore (limit to recent 500 for performance while keeping monthly stats accurate)
-    const [orders, products, expenses, adSpends, investments, customers, returns_] = await Promise.all([
-      getOrders(500).catch(() => []), 
-      getProducts().catch(() => []), 
-      getExpenses(500).catch(() => []), 
-      getAdSpend(500).catch(() => []), 
-      getInvestments().catch(() => []), 
-      getCustomers().catch(() => []), 
-      getReturns().catch(() => []),
-    ]);
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return NextResponse.json({ reply: 'No messages provided.' }, { status: 400 });
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      console.error('[AI Assistant] OPENROUTER_API_KEY is not set');
+      return NextResponse.json({
+        reply: '⚙️ AI is not configured yet. Please set the OPENROUTER_API_KEY environment variable in Netlify.',
+      });
+    }
+
+    // Fetch live Firestore data with individual error isolation
+    const [orders, products, expenses, adSpends, investments, customers, returns_] =
+      await Promise.all([
+        getOrders(500).catch(e => { console.error('[AI] orders fetch failed:', e); return []; }),
+        getProducts().catch(e  => { console.error('[AI] products fetch failed:', e); return []; }),
+        getExpenses(500).catch(e => { console.error('[AI] expenses fetch failed:', e); return []; }),
+        getAdSpend(500).catch(e => { console.error('[AI] adSpend fetch failed:', e); return []; }),
+        getInvestments().catch(e => { console.error('[AI] investments fetch failed:', e); return []; }),
+        getCustomers().catch(e  => { console.error('[AI] customers fetch failed:', e); return []; }),
+        getReturns().catch(e   => { console.error('[AI] returns fetch failed:', e); return []; }),
+      ]);
 
     const stats = computeDashboardStats(orders, products, expenses, adSpends, investments);
-
-    // Build business context string
-    const now = new Date();
+    const now   = new Date();
     const monthName = now.toLocaleString('en-BD', { month: 'long', year: 'numeric' });
+
     const deliveredOrders = orders.filter(o => o.status === 'Delivered');
-    const pendingOrders = orders.filter(o => o.status === 'Pending');
-    const topProducts = [...products].sort((a, b) => b.stock - a.stock).slice(0, 5);
-    const lowStock = products.filter(p => p.stock <= p.lowStockThreshold);
-    const topCustomers = [...customers].sort((a, b) => b.totalOrders - a.totalOrders).slice(0, 5);
+    const pendingOrders   = orders.filter(o => o.status === 'Pending');
+    const lowStock        = products.filter(p => p.stock <= p.lowStockThreshold);
+    const topCustomers    = [...customers].sort((a, b) => b.totalOrders - a.totalOrders).slice(0, 5);
 
     // Ad spend by product
     const adByProduct: Record<string, number> = {};
     adSpends.forEach(a => { adByProduct[a.productName] = (adByProduct[a.productName] ?? 0) + a.amount; });
     const topAdProducts = Object.entries(adByProduct).sort(([, a], [, b]) => b - a).slice(0, 3);
 
+    // Best-selling products by units
+    const unitsByProduct: Record<string, number> = {};
+    deliveredOrders.forEach(o => { unitsByProduct[o.productName] = (unitsByProduct[o.productName] ?? 0) + o.quantity; });
+    const topProducts = Object.entries(unitsByProduct).sort(([, a], [, b]) => b - a).slice(0, 5);
+
     const context = `
 You are the AI Business Assistant for Puspaloy Business OS — a Bangladeshi F-Commerce business selling cosmetics, gifts, and fashion products.
 You have access to LIVE business data fetched right now (${now.toLocaleString('en-BD')}).
-Answer questions in the same language the user asks (Bengali or English).
-Be concise, specific, and use the actual numbers from the data below.
+Answer in the same language the user asks (Bengali or English). Be concise and use actual numbers from the data.
+Do NOT hallucinate data. If data is zero or missing, say so honestly.
 
-=== DASHBOARD STATS ===
+=== DASHBOARD (Live) ===
 - Orders Today: ${stats.ordersToday}
 - Revenue Today: ৳${stats.revenueToday.toLocaleString()}
 - Profit Today: ৳${stats.profitToday.toLocaleString()}
 - Ad Spend Today: ৳${stats.adSpendToday.toLocaleString()}
-- Current Cash Balance: ৳${stats.currentCashBalance.toLocaleString()}
+- Cash Balance (All-Time): ৳${stats.currentCashBalance.toLocaleString()}
 - Inventory Value: ৳${stats.inventoryValue.toLocaleString()}
-- ${monthName} Revenue: ৳${stats.monthlyRevenue.toLocaleString()}
-- ${monthName} Expenses: ৳${stats.monthlyExpenses.toLocaleString()}
-- ${monthName} Profit: ৳${stats.monthlyProfit.toLocaleString()}
+
+=== ${monthName} ===
+- Revenue: ৳${stats.monthlyRevenue.toLocaleString()}
+- Expenses: ৳${stats.monthlyExpenses.toLocaleString()}
+- Net Profit: ৳${stats.monthlyProfit.toLocaleString()}
 
 === ORDERS ===
-- Total Orders: ${orders.length}
-- Delivered: ${deliveredOrders.length}
-- Pending: ${pendingOrders.length}
-- Returned: ${returns_.length}
+- Total: ${orders.length} | Delivered: ${deliveredOrders.length} | Pending: ${pendingOrders.length} | Returned: ${returns_.length}
 - Return Rate: ${deliveredOrders.length > 0 ? ((returns_.length / (deliveredOrders.length + returns_.length)) * 100).toFixed(1) : 0}%
 
+=== TOP SELLING PRODUCTS (by units) ===
+${topProducts.length ? topProducts.map(([n, u]) => `- ${n}: ${u} units`).join('\n') : '- No delivered orders yet'}
+
 === INVENTORY (${products.length} products) ===
-${products.slice(0, 10).map(p => `- ${p.name}: ${p.stock} pcs in stock, Buy ৳${p.purchasePrice}, Sell ৳${p.sellingPrice}`).join('\n')}
-${lowStock.length > 0 ? `\nLOW STOCK ALERT: ${lowStock.map(p => p.name + ' (' + p.stock + ' left)').join(', ')}` : ''}
+${products.slice(0, 10).map(p => `- ${p.name}: ${p.stock} pcs | Buy ৳${p.purchasePrice} | Sell ৳${p.sellingPrice}`).join('\n')}
+${lowStock.length > 0 ? `\n⚠️ LOW STOCK: ${lowStock.map(p => `${p.name} (${p.stock} left)`).join(', ')}` : '\n✅ All stock levels OK'}
 
 === TOP CUSTOMERS ===
-${topCustomers.map(c => `- ${c.name}: ${c.totalOrders} orders, ৳${c.totalSpending.toLocaleString()} total`).join('\n')}
+${topCustomers.length ? topCustomers.map(c => `- ${c.name} (${c.phone}): ${c.totalOrders} orders, ৳${c.totalSpending.toLocaleString()}`).join('\n') : '- No customers yet'}
 
 === AD SPEND (Top Products) ===
-${topAdProducts.map(([name, amt]) => `- ${name}: ৳${amt.toLocaleString()} total ad spend`).join('\n')}
+${topAdProducts.length ? topAdProducts.map(([n, a]) => `- ${n}: ৳${a.toLocaleString()} total`).join('\n') : '- No ad spend recorded'}
 
 === INVESTMENTS ===
 - Nirob: ৳${investments.filter(i => i.person === 'Nirob').reduce((s, i) => s + i.amount, 0).toLocaleString()}
 - Partner: ৳${investments.filter(i => i.person === 'Partner').reduce((s, i) => s + i.amount, 0).toLocaleString()}
-`;
+`.trim();
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://puspaloy.netlify.app',
-        'X-Title': 'Puspaloy Business OS',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: context },
-          ...messages,
-        ],
-        temperature: 0.3,
-        max_tokens: 500,
-      }),
-    });
+    // Call OpenRouter with a timeout
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('OpenRouter error:', err);
-      return NextResponse.json({ reply: 'Sorry, the AI service is currently unavailable. Please try again later.' });
+    let aiResponse: Response;
+    try {
+      aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type':  'application/json',
+          'HTTP-Referer':  process.env.NEXT_PUBLIC_APP_URL ?? 'https://puspaloy.netlify.app',
+          'X-Title':       'Puspaloy Business OS',
+        },
+        body: JSON.stringify({
+          model:       'openai/gpt-4o-mini',
+          messages:    [{ role: 'system', content: context }, ...messages],
+          temperature: 0.3,
+          max_tokens:  600,
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content ?? 'Sorry, I could not generate a response. Please try asking in a different way.';
+    if (!aiResponse.ok) {
+      const errText = await aiResponse.text().catch(() => 'Unknown error');
+      console.error('[AI Assistant] OpenRouter error:', aiResponse.status, errText);
+
+      if (aiResponse.status === 401) {
+        return NextResponse.json({ reply: '🔑 Invalid API key. Please check the OPENROUTER_API_KEY in Netlify settings.' });
+      }
+      if (aiResponse.status === 429) {
+        return NextResponse.json({ reply: '⏳ AI rate limit reached. Please wait a moment and try again.' });
+      }
+      return NextResponse.json({ reply: '⚠️ AI service is temporarily unavailable. Please try again shortly.' });
+    }
+
+    const data   = await aiResponse.json();
+    const reply  = data.choices?.[0]?.message?.content?.trim();
+
+    if (!reply) {
+      return NextResponse.json({ reply: 'I received an empty response. Please rephrase your question.' });
+    }
+
     return NextResponse.json({ reply });
-  } catch (error) {
-    console.error('AI assistant error:', error);
-    return NextResponse.json({ reply: 'An internal error occurred while generating the response. Please try again.' });
+
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      return NextResponse.json({ reply: '⏱️ The request timed out. Please try a simpler question.' });
+    }
+    console.error('[AI Assistant] Unexpected error:', error);
+    return NextResponse.json({ reply: '❌ Something went wrong. Please try again.' });
   }
 }

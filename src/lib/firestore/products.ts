@@ -1,7 +1,7 @@
 import {
   collection, addDoc, updateDoc, deleteDoc,
   doc, getDocs, onSnapshot, query, orderBy,
-  serverTimestamp, Timestamp
+  serverTimestamp, increment
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Product } from '@/types';
@@ -19,8 +19,12 @@ export const updateProduct = (id: string, data: Partial<Product>) =>
 export const deleteProduct = (id: string) =>
   deleteDoc(doc(db, COL, id));
 
+/**
+ * Adjust stock by a delta (positive = add, negative = deduct).
+ * Uses Firestore increment() to prevent race conditions.
+ */
 export const adjustStock = (id: string, delta: number) =>
-  updateDoc(doc(db, COL, id), { stock: delta });
+  updateDoc(doc(db, COL, id), { stock: increment(delta) });
 
 export const getProducts = async (): Promise<Product[]> => {
   const snap = await getDocs(query(productsRef(), orderBy('createdAt', 'desc')));
