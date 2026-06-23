@@ -23,8 +23,16 @@ export default function LoginPage() {
       // Set auth cookie for middleware
       document.cookie = 'puspaloy-auth=1; path=/; max-age=86400';
       router.push('/');
-    } catch {
-      setError('Invalid email or password. Please try again.');
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      // Check for specific Firebase errors
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Email/Password login is not enabled in Firebase Console.');
+      } else if (err.code === 'auth/invalid-credential') {
+        setError('Wrong email or password.');
+      } else {
+        setError(err.message || 'Failed to login. Check console for details.');
+      }
     } finally {
       setLoading(false);
     }
