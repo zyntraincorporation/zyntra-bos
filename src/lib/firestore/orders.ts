@@ -1,7 +1,7 @@
 import {
   collection, addDoc, updateDoc, doc,
   getDocs, onSnapshot, query, orderBy,
-  where, serverTimestamp
+  where, serverTimestamp, limit
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Order, OrderStatus } from '@/types';
@@ -19,19 +19,20 @@ export const updateOrder = (id: string, data: Partial<Order>) =>
 export const updateOrderStatus = (id: string, status: OrderStatus) =>
   updateDoc(doc(db, COL, id), { status });
 
-export const getOrders = async (): Promise<Order[]> => {
-  const snap = await getDocs(query(ordersRef(), orderBy('createdAt', 'desc')));
+
+export const getOrders = async (max: number = 100): Promise<Order[]> => {
+  const snap = await getDocs(query(ordersRef(), orderBy('createdAt', 'desc'), limit(max)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Order));
 };
 
-export const subscribeOrders = (cb: (orders: Order[]) => void) =>
-  onSnapshot(query(ordersRef(), orderBy('createdAt', 'desc')), snap => {
+export const subscribeOrders = (cb: (orders: Order[]) => void, max: number = 100) =>
+  onSnapshot(query(ordersRef(), orderBy('createdAt', 'desc'), limit(max)), snap => {
     cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as Order)));
   });
 
-export const subscribeOrdersByStatus = (status: OrderStatus, cb: (orders: Order[]) => void) =>
+export const subscribeOrdersByStatus = (status: OrderStatus, cb: (orders: Order[]) => void, max: number = 100) =>
   onSnapshot(
-    query(ordersRef(), where('status', '==', status), orderBy('createdAt', 'desc')),
+    query(ordersRef(), where('status', '==', status), orderBy('createdAt', 'desc'), limit(max)),
     snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as Order)))
   );
 

@@ -14,9 +14,15 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'OpenRouter API key not configured' }, { status: 500 });
 
-    // Fetch live data from Firestore
+    // Fetch live data from Firestore (limit to recent 500 for performance while keeping monthly stats accurate)
     const [orders, products, expenses, adSpends, investments, customers, returns_] = await Promise.all([
-      getOrders(), getProducts(), getExpenses(), getAdSpend(), getInvestments(), getCustomers(), getReturns(),
+      getOrders(500).catch(() => []), 
+      getProducts().catch(() => []), 
+      getExpenses(500).catch(() => []), 
+      getAdSpend(500).catch(() => []), 
+      getInvestments().catch(() => []), 
+      getCustomers().catch(() => []), 
+      getReturns().catch(() => []),
     ]);
 
     const stats = computeDashboardStats(orders, products, expenses, adSpends, investments);
@@ -96,14 +102,14 @@ ${topAdProducts.map(([name, amt]) => `- ${name}: ৳${amt.toLocaleString()} tota
     if (!response.ok) {
       const err = await response.text();
       console.error('OpenRouter error:', err);
-      return NextResponse.json({ error: 'AI service error' }, { status: 502 });
+      return NextResponse.json({ reply: 'Sorry, the AI service is currently unavailable. Please try again later.' });
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content ?? 'Sorry, I could not generate a response.';
+    const reply = data.choices?.[0]?.message?.content ?? 'Sorry, I could not generate a response. Please try asking in a different way.';
     return NextResponse.json({ reply });
   } catch (error) {
     console.error('AI assistant error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ reply: 'An internal error occurred while generating the response. Please try again.' });
   }
 }

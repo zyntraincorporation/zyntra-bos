@@ -49,26 +49,38 @@ Do not include any explanation outside the JSON.`;
         ],
         temperature: 0.1,
         max_tokens: 300,
+        response_format: { type: "json_object" }
       }),
     });
 
     if (!response.ok) {
       const err = await response.text();
       console.error('OpenRouter error:', err);
-      return NextResponse.json({ error: 'AI service error' }, { status: 502 });
+      return NextResponse.json({ error: 'Failed to connect to AI parsing service. Please try again.' }, { status: 502 });
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? '{}';
+    const content = data.choices?.[0]?.message?.content;
 
-    // Extract JSON from response (handles markdown code blocks)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return NextResponse.json({ error: 'Could not parse AI response' }, { status: 500 });
+    if (!content) {
+      return NextResponse.json({ error: 'AI returned an empty response. Please try again.' }, { status: 500 });
+    }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return NextResponse.json(parsed);
+    try {
+      const parsed = JSON.parse(content);
+      
+      // Safety checks for required fields
+      if (!parsed.missingFields) parsed.missingFields = [];
+      if (!parsed.customerName && !parsed.missingFields.includes('customerName')) parsed.missingFields.push('customerName');
+      if (!parsed.phone && !parsed.missingFields.includes('phone')) parsed.missingFields.push('phone');
+
+      return NextResponse.json(parsed);
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError, content);
+      return NextResponse.json({ error: 'Failed to understand the message. Please enter the details manually.' }, { status: 400 });
+    }
   } catch (error) {
     console.error('Parse order error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'An unexpected error occurred while parsing. Please enter manually.' }, { status: 500 });
   }
 }

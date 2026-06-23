@@ -46,34 +46,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Create order in Firestore via admin-style fetch to our own API
+    // Create order in Firestore
     const orderId = `PSL-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+    
+    // We import our internal functions dynamically or at the top
+    const { addOrder } = await import('@/lib/firestore/orders');
+    const { syncCustomerFromOrder } = await import('@/lib/firestore/customerSync');
 
-    // We store the order directly using Firestore REST API
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/orders`;
     const orderData = {
-      fields: {
-        id:           { stringValue: orderId },
-        customerName: { stringValue: parsed.customerName },
-        phone:        { stringValue: parsed.phone },
-        address:      { stringValue: parsed.address ?? '' },
-        productName:  { stringValue: parsed.product ?? '' },
-        productId:    { stringValue: '' },
-        quantity:     { integerValue: parsed.quantity ?? 1 },
-        sellingPrice: { integerValue: 0 },
-        status:       { stringValue: 'Pending' },
-        source:       { stringValue: 'Telegram' },
-        courierTracking: { stringValue: '' },
-        createdAt:    { stringValue: new Date().toISOString() },
-      },
+      customerName: parsed.customerName,
+      phone: parsed.phone,
+      address: parsed.address ?? '',
+      productId: '',
+      productName: parsed.product ?? '',
+      quantity: parsed.quantity ?? 1,
+      sellingPrice: 0,
+      status: 'Pending' as const,
+      source: 'Telegram' as const,
+      courierTracking: '',
+      note: 'Via Telegram Bot',
     };
 
-    await fetch(firestoreUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData),
-    });
+    await addOrder(orderData);
+    
+    // Sync customer CRM
+    await syncCustomerFromOrder({ ...orderData, id: orderId, createdAt: new Date().toISOString() });
 
     await sendReply(
       `✅ <b>Order Added Successfully!</b>\n\n` +

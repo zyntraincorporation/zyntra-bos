@@ -39,7 +39,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* Floating Action Button (FAB) for New Order */}
+      <div className="fixed bottom-20 right-4 md:bottom-8 md:right-8 z-50">
+        <Link
+          href="/orders/new"
+          className="flex items-center justify-center w-14 h-14 bg-emerald-500 text-white rounded-full shadow-lg hover:bg-emerald-600 transition-transform transform hover:scale-105"
+        >
+          <span className="text-2xl leading-none font-bold pb-1">+</span>
+        </Link>
+      </div>
+
       <nav className="mobile-nav">
         {mobileNavItems.map(item => {
           const active = pathname === item.href ||
