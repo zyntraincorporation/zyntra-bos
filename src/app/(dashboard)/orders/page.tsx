@@ -26,15 +26,36 @@ const STATUS_TAB_STYLE: Partial<Record<OrderStatus | 'All', string>> = {
   Cancelled:         'text-gray-500   bg-gray-50    border-gray-200',
 };
 
-export default function OrdersPage() {
+import { Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+
+function OrdersPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isNew = searchParams.get('new') === 'true';
+
   const [orders, setOrders]         = useState<Order[]>([]);
   const [customers, setCustomers]   = useState<Customer[]>([]);
   const [products, setProducts]     = useState<Product[]>([]);
   const [loading, setLoading]       = useState(true);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'All'>('All');
   const [search, setSearch]         = useState('');
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(isNew);
   const [courierOrder, setCourierOrder] = useState<Order | null>(null);
+
+  // Sync state if URL changes
+  useEffect(() => {
+    if (isNew) {
+      setDrawerOpen(true);
+    }
+  }, [isNew]);
+
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+    if (isNew) {
+      router.replace('/orders'); // Remove ?new=true from URL
+    }
+  };
 
   useEffect(() => {
     const u1 = subscribeOrders(data => { setOrders(data); setLoading(false); }, 300);
@@ -182,7 +203,7 @@ export default function OrdersPage() {
       {/* Order Drawer */}
       <OrderDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={handleCloseDrawer}
         products={products}
       />
 
@@ -192,5 +213,13 @@ export default function OrdersPage() {
         onClose={() => setCourierOrder(null)}
       />
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-400">Loading orders...</div>}>
+      <OrdersPageContent />
+    </Suspense>
   );
 }

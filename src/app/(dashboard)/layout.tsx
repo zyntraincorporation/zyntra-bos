@@ -54,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Floating Action Button — New Order */}
       <Link
-        href="/orders/new"
+        href="/orders?new=true"
         className="fab md:hidden"
         aria-label="New Order"
       >
@@ -63,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Desktop FAB */}
       <Link
-        href="/orders/new"
+        href="/orders?new=true"
         className="fab hidden md:flex"
         aria-label="New Order"
       >
