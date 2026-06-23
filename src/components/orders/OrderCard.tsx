@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Phone, MapPin, Package, Truck, CheckCircle2,
-  XCircle, RotateCcw, Clock, Facebook, MessageCircle, Edit3
+  XCircle, RotateCcw, Clock, Share2, MessageCircle, Edit3
 } from 'lucide-react';
 import { updateOrderStatus } from '@/lib/firestore/orders';
 import { addReturn } from '@/lib/firestore/returns';
@@ -31,7 +31,7 @@ const NEXT_LABEL: Partial<Record<OrderStatus, string>> = {
 };
 
 const SOURCE_ICON: Record<string, React.ReactNode> = {
-  Facebook: <Facebook className="w-3 h-3" />,
+  Facebook: <Share2 className="w-3 h-3" />,
   Telegram: <MessageCircle className="w-3 h-3" />,
   Manual:   <Edit3 className="w-3 h-3" />,
 };
